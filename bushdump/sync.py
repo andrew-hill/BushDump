@@ -1,7 +1,7 @@
-"""Incremental, id-based sync logic.
+"""Incremental, date-based sync logic.
 
-We persist the id of the newest downloaded file and, on the next run, only pull
-files with a higher id than that watermark. Pure functions here so they're easy
+We persist the date string of the newest downloaded file and, on the next run,
+only pull files with a strictly later date. Pure functions here so they're easy
 to test without a camera.
 """
 
@@ -24,22 +24,17 @@ def cameras_present(cameras: Iterable[Camera], present_addresses: Iterable[str])
 
 def files_to_download(
     available: Iterable[CameraFile],
-    watermark: int | None,
+    watermark: str | None,
 ) -> list[CameraFile]:
-    """Return files strictly newer than `watermark`, lowest id first.
+    """Return files strictly newer than `watermark`, oldest first.
 
-    `watermark` is the `id` of the newest file downloaded on a prior run, or
-    None for a first run (download everything).
+    `watermark` is the `date` of the newest file downloaded on a prior run
+    ("YYYY-MM-DD HH:MM:SS"), or None for a first run (download everything).
+    Legacy int watermarks from the old id-based scheme are treated as None so
+    they trigger a full re-scan (already-on-disk files are skipped by size).
     """
-    cutoff = watermark if watermark is not None else -1
-    newer = [f for f in available if f.id > cutoff]
-    return sorted(newer, key=lambda f: f.id)
-
-
-def next_watermark(downloaded: Iterable[CameraFile], previous: int | None) -> int | None:
-    """Compute the new watermark after a run: the max id seen."""
-    ids = [f.id for f in downloaded]
-    if not ids:
-        return previous
-    newest = max(ids)
-    return newest if previous is None else max(newest, previous)
+    if watermark is None or isinstance(watermark, int):
+        newer = list(available)
+    else:
+        newer = [f for f in available if f.date > watermark]
+    return sorted(newer, key=lambda f: (f.date, f.id))

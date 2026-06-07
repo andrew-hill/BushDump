@@ -281,7 +281,7 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
                     _out(f"  ↓ {f.name}")
                 else:
                     _vout(f"  = {f.name}  (already on disk)")
-                cam_state[media] = f.id
+                cam_state[media] = f.date
                 config.save_state(state)
 
         if not args.keep_awake:

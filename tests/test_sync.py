@@ -1,11 +1,12 @@
 from types import SimpleNamespace
 
 from bushdump.camera import CameraFile
-from bushdump.sync import cameras_present, files_to_download, next_watermark
+from bushdump.sync import cameras_present, files_to_download
 
 
 def _file(id: int) -> CameraFile:
-    return CameraFile(id=id, type=1, date="2026-05-10 13:00:01", size=100)
+    # date encodes id as seconds so ordering is unambiguous in tests
+    return CameraFile(id=id, type=1, date=f"2026-05-10 13:00:{id:02d}", size=100)
 
 
 def test_first_run_downloads_everything_oldest_first():
@@ -16,26 +17,19 @@ def test_first_run_downloads_everything_oldest_first():
 
 def test_only_files_newer_than_watermark():
     files = [_file(1), _file(2), _file(3)]
-    result = files_to_download(files, watermark=2)
+    result = files_to_download(files, watermark=_file(2).date)
     assert [f.id for f in result] == [3]
 
 
 def test_watermark_is_exclusive():
     files = [_file(2)]
-    assert files_to_download(files, watermark=2) == []
+    assert files_to_download(files, watermark=_file(2).date) == []
 
 
-def test_next_watermark_takes_max():
-    downloaded = [_file(10), _file(30), _file(20)]
-    assert next_watermark(downloaded, previous=15) == 30
-
-
-def test_next_watermark_keeps_previous_when_nothing_downloaded():
-    assert next_watermark([], previous=42) == 42
-
-
-def test_next_watermark_first_run():
-    assert next_watermark([_file(5)], previous=None) == 5
+def test_legacy_int_watermark_treated_as_first_run():
+    files = [_file(1), _file(2), _file(3)]
+    result = files_to_download(files, watermark=2)  # type: ignore[arg-type]
+    assert [f.id for f in result] == [1, 2, 3]
 
 
 def _cam(name, ble):
