@@ -95,7 +95,10 @@ def test_write_config_template_creates_then_is_noop(tmp_path):
 
 def test_state_round_trip_nested(tmp_path):
     path = tmp_path / "state.json"
-    state = {"frontgate": {"Photo": 100, "Video": 200}, "backwoods": {"Photo": 5}}
+    state = {
+        "frontgate": {"Photo": "2026-05-10 13:00:01", "Video": "2026-05-10 14:00:00"},
+        "backwoods": {"Photo": "2026-04-01 08:30:00"},
+    }
     config.save_state(state, path)
     assert config.load_state(path) == state
 

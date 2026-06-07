@@ -114,15 +114,15 @@ def add_camera(
 # --- sync state ------------------------------------------------------------
 
 
-def load_state(path: Path = STATE_PATH) -> dict[str, dict[str, int]]:
-    """Return {camera_name: {media_type: watermark_dt}}. Empty on first run."""
+def load_state(path: Path = STATE_PATH) -> dict[str, dict[str, str]]:
+    """Return {camera_name: {media_type: watermark_date}}. Empty on first run."""
     if not path.exists():
         return {}
     raw = json.loads(path.read_text())
-    return {str(cam): {str(k): int(v) for k, v in d.items()} for cam, d in raw.items()}
+    return {str(cam): {str(k): str(v) for k, v in d.items()} for cam, d in raw.items()}
 
 
-def save_state(state: dict[str, dict[str, int]], path: Path = STATE_PATH) -> None:
+def save_state(state: dict[str, dict[str, str]], path: Path = STATE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2, sort_keys=True))
 

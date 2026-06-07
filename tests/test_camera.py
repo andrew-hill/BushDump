@@ -14,10 +14,10 @@ def test_camerafile_from_json_parses_fields():
 def test_camerafile_kind_and_name():
     jpg = CameraFile(id=1, type=1, date="2026-05-10 13:00:01", size=100)
     assert jpg.kind == "JPG"
-    assert jpg.name == "00000001.jpg"
+    assert jpg.name == "20260510T130001_00000001.jpg"
     mp4 = CameraFile(id=2, type=2, date="2026-05-10 13:00:02", size=200)
     assert mp4.kind == "MP4"
-    assert mp4.name == "00000002.mp4"
+    assert mp4.name == "20260510T130002_00000002.mp4"
 
 
 def test_parse_file_page_data_envelope():

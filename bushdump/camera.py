@@ -31,7 +31,8 @@ class CameraFile:
 
     @property
     def name(self) -> str:
-        return f"{self.id:08d}.{self.kind.lower()}"
+        tag = self.date.replace("-", "").replace(" ", "T").replace(":", "")
+        return f"{tag}_{self.id:08d}.{self.kind.lower()}"
 
     @classmethod
     def from_json(cls, obj: dict) -> CameraFile:
@@ -149,11 +150,25 @@ class CameraClient:
     # --- API calls ---------------------------------------------------------
 
     def list_all_files(self) -> list[CameraFile]:
-        """Fetch all files on the camera in one paginated scan."""
+        """Fetch all files on the camera in one paginated scan.
+
+        Retries each page once on ReadTimeout — the camera's HTTP server
+        occasionally stalls mid-listing on longer card contents.
+        """
+        import httpx
+
         files: list[CameraFile] = []
         from_id = 0
         while True:
-            resp = self._client.get(f"/list/detail/forward/{from_id}/50")
+            for attempt in range(2):
+                try:
+                    resp = self._client.get(f"/list/detail/forward/{from_id}/50")
+                    break
+                except httpx.ReadTimeout:
+                    if attempt == 1:
+                        raise
+                    self._client.close()
+                    self._client = httpx.Client(base_url=self.base_url, timeout=self._timeout)
             resp.raise_for_status()
             page = parse_file_page(resp.json())
             if not page:
@@ -162,8 +177,12 @@ class CameraClient:
             from_id = page[-1].id
         return files
 
-    def download(self, file: CameraFile, dest_dir: Path) -> bool:
-        """Stream a file to dest_dir. Returns True if downloaded, False if already complete.
+    def download(self, file: CameraFile, dest_dir: Path) -> Path | None:
+        """Stream a file to dest_dir. Returns the saved path, or None if already complete.
+
+        Filenames include the camera timestamp, so collisions are extremely
+        rare. If one does occur (same timestamp+id, different content), a
+        numeric suffix (_2, _3, …) is appended until a free slot is found.
 
         Retries once on a fresh connection if the camera dropped the persistent
         connection after the previous response (RemoteProtocolError).
@@ -173,7 +192,19 @@ class CameraClient:
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / file.name
         if dest.exists() and dest.stat().st_size == file.size:
-            return False
+            return None
+        if dest.exists():
+            # Collision: same timestamp+id but different size. Find a free slot.
+            stem, _, suffix = file.name.rpartition(".")
+            counter = 2
+            while True:
+                candidate = dest_dir / f"{stem}_{counter}.{suffix}"
+                if not candidate.exists():
+                    dest = candidate
+                    break
+                if candidate.stat().st_size == file.size:
+                    return None  # already downloaded under this suffix
+                counter += 1
         tmp = dest.with_suffix(dest.suffix + ".part")
         for attempt in range(2):
             try:
@@ -190,7 +221,7 @@ class CameraClient:
                 self._client.close()
                 self._client = httpx.Client(base_url=self.base_url, timeout=self._timeout)
         tmp.replace(dest)
-        return True
+        return dest
 
     def stats(self) -> CameraStats:
         """Fetch camera health: battery, SD usage, file counts."""

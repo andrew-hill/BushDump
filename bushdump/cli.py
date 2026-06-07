@@ -39,6 +39,24 @@ def _vout(msg: str = "") -> None:
         print(msg)
 
 
+def _out_conflicts(conflicts: list[str]) -> None:
+    _out("\nWARNING: filename conflict(s) — files were saved under alternate names:", err=True)
+    for c in conflicts:
+        _out(f"  {c}", err=True)
+    _out("Review these in your output directory.", err=True)
+
+
+def _fmt_eta(s: float) -> str:
+    s = int(s)
+    if s < 60:
+        return f"{s}s"
+    m, sec = divmod(s, 60)
+    if m < 60:
+        return f"{m}m {sec:02d}s"
+    h, m = divmod(m, 60)
+    return f"{h}h {m:02d}m"
+
+
 def _open_log(spec: str | None) -> IO[str] | None:
     """Open a log file from a --log argument value. None → logging disabled."""
     if spec is None:
@@ -214,17 +232,24 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
         state = config.load_state()
         total = 0
+        all_conflicts: list[str] = []
         for cam in cameras:
             try:
-                total += _sync_one(cam, state, args)
+                n, conflicts = _sync_one(cam, state, args)
+                total += n
+                all_conflicts.extend(conflicts)
             except KeyboardInterrupt:
                 _out("\nInterrupted — progress saved.", err=True)
+                if all_conflicts:
+                    _out_conflicts(all_conflicts)
                 return 1
             except Exception:
                 _out(traceback.format_exc(), err=True)
-                raise
+                return 1
 
         _out(f"\nDone — {total} new file(s).")
+        if all_conflicts:
+            _out_conflicts(all_conflicts)
         _out("(Still on the camera's WiFi — rejoin your normal network when you're done.)")
         return 0
     finally:
@@ -234,7 +259,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         _verbose = False
 
 
-def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
+def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> tuple[int, list[str]]:
     from bushdump import wifi
     from bushdump.camera import CameraClient
 
@@ -257,10 +282,11 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
         _out("Waiting for camera to respond...")
         if not client.wait_until_ready():
             _out(f"  {cam.name}: camera did not respond over HTTP — skipping.", err=True)
-            return 0
+            return 0, []
         _out("Camera ready.")
 
         cam_state = state.setdefault(cam.name, {})
+        conflicts: list[str] = []
         last_alive = time.monotonic()
         all_files = client.list_all_files()
         for media in MEDIA_TYPES:
@@ -269,25 +295,46 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
             available = [f for f in all_files if f.type == type_code]
             todo = sync.files_to_download(available, watermark)
             _out(f"{media}: {len(todo)} new of {len(available)}")
-            for f in todo:
+            todo_bytes = sum(f.size for f in todo)
+            done_bytes = 0
+            avg_bytes = 0
+            avg_elapsed = 0.0
+            for done_count, f in enumerate(todo, 1):
                 now = time.monotonic()
                 if now - last_alive > 15:
                     ok = client.keep_alive()
                     last_alive = now
                     _vout(f"  [keep-alive → {'ok' if ok else 'failed'}]")
-                was_downloaded = client.download(f, cam.output_dir)
-                if was_downloaded:
+                t0 = time.monotonic()
+                saved = client.download(f, cam.output_dir)
+                file_elapsed = time.monotonic() - t0
+                done_bytes += f.size
+                if saved is not None:
                     downloaded_count += 1
-                    _out(f"  ↓ {f.name}")
+                    avg_bytes += f.size
+                    avg_elapsed += file_elapsed
+                    parts: list[str] = [f"{done_count}/{len(todo)}"]
+                    if file_elapsed > 0.01:
+                        parts.append(f"{f.size / file_elapsed / 1_000_000:.1f} MB/s")
+                    if avg_elapsed > 0.1:
+                        avg_rate = avg_bytes / avg_elapsed
+                        remaining = todo_bytes - done_bytes
+                        eta_str = _fmt_eta(remaining / avg_rate)
+                        parts.append(f"ETA {eta_str} ({avg_rate / 1_000_000:.1f} MB/s avg)")
+                    saved_name = saved.name
+                    if saved_name != f.name:
+                        _out(f"  ! {f.name} conflicts — saved as {saved_name}", err=True)
+                        conflicts.append(f"{cam.name}: {f.name} saved as {saved_name}")
+                    _out(f"  ↓ {saved_name}  [{', '.join(parts)}]")
                 else:
-                    _vout(f"  = {f.name}  (already on disk)")
+                    _vout(f"  = {f.name}  [{done_count}/{len(todo)}]  (already on disk)")
                 cam_state[media] = f.date
                 config.save_state(state)
 
         if not args.keep_awake:
             client.power_off()
 
-    return downloaded_count
+    return downloaded_count, conflicts
 
 
 def _print_ble_found(address: str, name: str | None) -> None:
