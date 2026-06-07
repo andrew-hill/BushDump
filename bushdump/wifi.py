@@ -27,6 +27,11 @@ def corewlan_available() -> bool:
 
 
 def _scan_once() -> list[str]:
+    """List nearby SSIDs. Calls CoreWLAN's active scan when it'll fire, but
+    also reads `cachedScanResults` — macOS rate-limits explicit scans so the
+    cache (kept fresh by the OS itself) is the more reliable source when a
+    new network has just come up.
+    """
     try:
         from CoreWLAN import CWWiFiClient
     except Exception:
@@ -35,10 +40,13 @@ def _scan_once() -> list[str]:
         interface = CWWiFiClient.sharedWiFiClient().interface()
         if interface is None:
             return []
-        networks, error = interface.scanForNetworksWithName_error_(None, None)
-        if error is not None or networks is None:
+        # Best-effort active scan; macOS may throttle this to once every ~30s
+        # but a successful one populates the cache.
+        interface.scanForNetworksWithName_error_(None, None)
+        cached = interface.cachedScanResults()
+        if not cached:
             return []
-        return [n.ssid() for n in networks if n.ssid()]
+        return [n.ssid() for n in cached if n.ssid()]
     except Exception:
         return []
 

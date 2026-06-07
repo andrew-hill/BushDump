@@ -74,15 +74,14 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
-    from bushdump import ble, wifi
+    from bushdump import wifi
     from bushdump.camera import CameraClient
 
     print(f"\n=== {cam.name} ===")
 
     if not args.manual_wifi:
         if cam.ble_address:
-            print("Waking camera WiFi over BLE...")
-            asyncio.run(ble.wake_wifi(cam.ble_address))
+            _wake_and_report(cam.ble_address, cam.name)
         else:
             print("No BLE address configured — skipping wake (turn WiFi on yourself).")
 
@@ -145,22 +144,68 @@ def cmd_discover(args: argparse.Namespace) -> int:
 
 
 def cmd_wifi(args: argparse.Namespace) -> int:
-    from bushdump import ble, wifi
+    from bushdump import wifi
 
-    if args.ble_address:
-        print(f"Waking {args.ble_address} over BLE to bring its WiFi up...")
-        try:
-            asyncio.run(ble.wake_wifi(args.ble_address))
-        except Exception as e:
-            print(f"  (BLE wake failed: {e})")
+    if args.target:
+        cfg = config.load_config()
+        address, label = _resolve_ble_target(args.target, cfg.cameras)
+        if address is None:
+            print(
+                f"Unknown camera {args.target!r}. Configured: {', '.join(cfg.cameras) or '(none)'}",
+                file=sys.stderr,
+            )
+            return 1
+        _wake_and_report(address, label)
 
     if not wifi.corewlan_available():
         print("WiFi scan unavailable — Location permission off?", file=sys.stderr)
         return 1
-    print(f"Watching for WiFi networks for {args.timeout:.0f}s...")
-    if not wifi.watch_ssids(args.timeout, _print_wifi_found):
+    # When we just woke a camera, give macOS longer to re-scan and surface the
+    # new AP — its background scan can take ~15s to spot a network that just
+    # came up.
+    timeout = args.timeout if args.timeout is not None else (20.0 if args.target else 8.0)
+    print(f"Watching for WiFi networks for {timeout:.0f}s...")
+    if not wifi.watch_ssids(timeout, _print_wifi_found):
         print("  (none found)")
     return 0
+
+
+def _resolve_ble_target(token: str, cameras: dict[str, config.Camera]) -> tuple[str | None, str]:
+    """Resolve a CLI token to a BLE address + display label.
+
+    If `token` matches a configured camera name, returns its BLE address and a
+    label like `"east (5919...)"`. Otherwise treats the token as a literal
+    BLE address. Returns `(None, token)` if the token looks like a name (no
+    dashes/colons) but doesn't match any configured camera.
+    """
+    cam = cameras.get(token)
+    if cam:
+        if not cam.ble_address:
+            return None, token
+        return cam.ble_address, f"{token} ({cam.ble_address})"
+    if "-" in token or ":" in token:
+        return token, token
+    return None, token
+
+
+def _wake_and_report(address: str, label: str) -> None:
+    """Wake the camera by address, printing the camera's ack on success."""
+    from bushdump import ble
+
+    print(f"Waking {label} over BLE to bring its WiFi up...")
+    try:
+        reply = asyncio.run(ble.wake_wifi(address))
+    except Exception as e:
+        print(f"  (BLE wake failed: {e})")
+        return
+    if reply is None:
+        print("  (camera didn't ack — the wake may not have taken effect)")
+        return
+    try:
+        text = reply.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        text = reply.hex()
+    print(f"  camera ack: {text!r}")
 
 
 def _pick_ble_device(timeout: float) -> tuple[str, str | None] | None:
@@ -224,7 +269,7 @@ def _prompt_name(prompt: str) -> str | None:
 
 
 def cmd_add(args: argparse.Namespace) -> int:
-    from bushdump import ble, wifi
+    from bushdump import wifi
     from bushdump.camera import CameraClient
 
     device = _pick_ble_device(args.timeout)
@@ -233,11 +278,7 @@ def cmd_add(args: argparse.Namespace) -> int:
         return 1
     address, adv_name = device
 
-    print(f"\nConnecting to {adv_name or address} over BLE to switch its WiFi on...")
-    try:
-        asyncio.run(ble.wake_wifi(address))
-    except Exception as e:
-        print(f"  (BLE wake failed: {e} — the camera's WiFi may already be on)")
+    _wake_and_report(address, adv_name or address)
 
     ssid = _pick_ssid(args.wifi_timeout)
     if not ssid:
@@ -291,8 +332,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_discover.set_defaults(func=cmd_discover)
 
     p_wifi = sub.add_parser("wifi", help="list WiFi networks (optionally wake a camera first)")
-    p_wifi.add_argument("ble_address", nargs="?", help="BLE address to wake before scanning")
-    p_wifi.add_argument("--timeout", type=float, default=8.0, help="WiFi watch seconds")
+    p_wifi.add_argument(
+        "target",
+        nargs="?",
+        help="camera name (from config) or BLE address to wake before scanning",
+    )
+    p_wifi.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="WiFi watch seconds (default: 20 if waking a camera, 8 otherwise)",
+    )
     p_wifi.set_defaults(func=cmd_wifi)
 
     p_add = sub.add_parser("add", help="register a camera (guided; pick from live lists)")
