@@ -34,7 +34,7 @@ output to figure out whether the camera is Linkiing, legacy, or something
 unknown.
 
 ```bash
-./bd discover                                       # find the BLE address
+./bd ble                                            # find the BLE address
 uv run python tools/inspect-ble.py <ble-address>
 ```
 

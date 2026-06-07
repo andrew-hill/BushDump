@@ -25,7 +25,7 @@ DEFAULT_PASSWORD = "1234567890"
 
 CONFIG_TEMPLATE = f"""\
 # BushDump config — one entry per camera under [cameras.<name>].
-# Run `bushdump add` to detect a camera and append it here automatically.
+# Run `bushdump register` to detect a camera and append it here automatically.
 
 # Defaults applied to every camera unless overridden in its own section.
 output_dir = "{DEFAULT_OUTPUT_DIR}"   # each camera saves to <output_dir>/<name>/
@@ -57,7 +57,7 @@ class Config:
 def load_config(path: Path = CONFIG_PATH) -> Config:
     if not path.exists():
         raise FileNotFoundError(
-            f"No config at {path}. Run `bushdump init` (or `bushdump add`) to create one."
+            f"No config at {path}. Run `bushdump register` to set up your first camera."
         )
     data = tomllib.loads(path.read_text())
     base_dir = Path(data.get("output_dir", DEFAULT_OUTPUT_DIR)).expanduser()

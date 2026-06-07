@@ -47,6 +47,44 @@ class CameraFile:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class CameraStats:
+    """Camera health snapshot from /cmd/info/2 and /cmd/info/3."""
+
+    battery: int  # percent 0–100
+    temperature: int  # celsius
+    ext_power: bool
+    sd_total_mb: int
+    sd_used_mb: int
+    photo_count: int
+    video_count: int
+
+
+def parse_info2(data: object) -> tuple[int, int, bool]:
+    """Parse /cmd/info/2 → (battery %, temperature °C, ext_power). Best-effort."""
+    if not isinstance(data, dict):
+        return 0, 0, False
+    d = data.get("data") or {}
+    return (
+        int(d.get("battery", 0) or 0),
+        int(d.get("temperature", 0) or 0),
+        bool(d.get("ext_power", False)),
+    )
+
+
+def parse_info3(data: object) -> tuple[int, int, int, int]:
+    """Parse /cmd/info/3 → (sd_total_mb, sd_used_mb, photo_count, video_count). Best-effort."""
+    if not isinstance(data, dict):
+        return 0, 0, 0, 0
+    d = data.get("data") or {}
+    return (
+        int(d.get("total", 0) or 0),
+        int(d.get("used", 0) or 0),
+        int(d.get("photo", 0) or 0),
+        int(d.get("video", 0) or 0),
+    )
+
+
 def parse_file_page(data: object) -> list[CameraFile]:
     """Parse a file listing response into CameraFiles.
 
@@ -140,6 +178,22 @@ class CameraClient:
                     fh.write(chunk)
         tmp.replace(dest)
         return dest
+
+    def stats(self) -> CameraStats:
+        """Fetch camera health: battery, SD usage, file counts."""
+        battery, temperature, ext_power = parse_info2(self._client.get("/cmd/info/2").json())
+        sd_total_mb, sd_used_mb, photo_count, video_count = parse_info3(
+            self._client.get("/cmd/info/3").json()
+        )
+        return CameraStats(
+            battery=battery,
+            temperature=temperature,
+            ext_power=ext_power,
+            sd_total_mb=sd_total_mb,
+            sd_used_mb=sd_used_mb,
+            photo_count=photo_count,
+            video_count=video_count,
+        )
 
     def describe(self) -> str:
         """One-line summary for the add-confirm step (best-effort)."""

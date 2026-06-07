@@ -31,8 +31,8 @@ uv sync
 Register each camera once (guided — pick from live lists, no typing long codes):
 
 ```bash
-./bd add        # detect a camera, pick its BLE device + WiFi, give it a name
-./bd list       # show configured cameras
+./bd register        # detect a camera, pick its BLE device + WiFi, give it a name
+./bd cameras         # show configured cameras
 ```
 
 Then sync whenever you like:
@@ -40,14 +40,16 @@ Then sync whenever you like:
 ```bash
 ./bd sync             # scan and sync every nearby configured camera
 ./bd sync frontgate   # sync just one
-./bd discover         # read-only: live-list nearby BLE devices
+./bd ls frontgate     # preview which files would be downloaded
+./bd stats frontgate  # battery, SD usage, file counts
+./bd ble              # read-only: live-list nearby BLE devices
 ./bd wifi [ble-addr]  # live-list WiFi networks (wake a camera first if given)
 ./bd --help           # all commands and flags
 ```
 
 > **macOS permissions:** the first BLE use prompts for Bluetooth access (approve
-> it). Listing WiFi networks needs Location Services — if it's off, `add` falls
-> back to typing the SSID manually.
+> it). Listing WiFi networks needs Location Services — if it's off, `register`
+> falls back to typing the SSID manually.
 
 ## Development
 

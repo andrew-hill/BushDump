@@ -1,4 +1,4 @@
-from bushdump.camera import CameraFile, parse_file_page
+from bushdump.camera import CameraFile, parse_file_page, parse_info2, parse_info3
 
 
 def test_camerafile_from_json_parses_fields():
@@ -31,3 +31,37 @@ def test_parse_file_page_skips_malformed():
     assert parse_file_page({"code": 0, "data": [{"id": 1}]}) == []  # missing fields
     assert parse_file_page({"code": 0, "data": []}) == []
     assert parse_file_page(None) == []
+
+
+def test_parse_info2_nominal():
+    data = {"code": 0, "data": {"battery": 85, "temperature": 22, "ext_power": True}}
+    battery, temp, ext = parse_info2(data)
+    assert battery == 85
+    assert temp == 22
+    assert ext is True
+
+
+def test_parse_info2_missing_fields():
+    battery, temp, ext = parse_info2({"code": 0, "data": {}})
+    assert battery == 0
+    assert temp == 0
+    assert ext is False
+
+
+def test_parse_info2_bad_shape():
+    assert parse_info2(None) == (0, 0, False)
+    assert parse_info2("garbage") == (0, 0, False)
+
+
+def test_parse_info3_nominal():
+    data = {"code": 0, "data": {"total": 32000, "used": 8192, "photo": 120, "video": 5}}
+    total, used, photos, videos = parse_info3(data)
+    assert total == 32000
+    assert used == 8192
+    assert photos == 120
+    assert videos == 5
+
+
+def test_parse_info3_missing_fields():
+    assert parse_info3({"code": 0, "data": {}}) == (0, 0, 0, 0)
+    assert parse_info3(None) == (0, 0, 0, 0)

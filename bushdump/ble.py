@@ -5,7 +5,7 @@ characteristic, after which the camera brings up its WiFi access point. See
 docs/camera-api.md.
 
 On macOS, BLE peripherals are identified by a CoreBluetooth UUID (not a MAC).
-`discover` lists everything nearby so you can pick yours in `bushdump add`.
+`discover` lists everything nearby so you can pick yours in `bushdump register`.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Command-line entry point for BushDump.
 
 Heavy deps (bleak, httpx) are imported lazily inside command handlers so that
-`--help`, `init`, and the test suite don't require them.
+`--help` and the test suite don't require them.
 """
 
 from __future__ import annotations
@@ -54,25 +54,93 @@ def _open_log(spec: str | None) -> IO[str] | None:
     return path.open("w", encoding="utf-8")
 
 
-def cmd_init(args: argparse.Namespace) -> int:
-    if config.write_config_template():
-        print(f"Wrote config template to {config.CONFIG_PATH}")
-        print("Edit it, or run `bushdump add` to register a camera interactively.")
-    else:
-        print(f"Config already exists at {config.CONFIG_PATH} — leaving it untouched.")
-    return 0
-
-
-def cmd_list(args: argparse.Namespace) -> int:
+def cmd_cameras(args: argparse.Namespace) -> int:
     cfg = config.load_config()
     if not cfg.cameras:
-        print("No cameras configured. Run `bushdump add` (or edit the config).")
+        print("No cameras configured. Run `bushdump register` (or edit the config).")
         return 0
     for name, cam in cfg.cameras.items():
         print(name)
         print(f"    ssid:   {cam.ssid or '(unset)'}")
         print(f"    ble:    {cam.ble_address or '(unset)'}")
         print(f"    output: {cam.output_dir}")
+    return 0
+
+
+def _wake_join(cam: config.Camera) -> None:
+    """BLE-wake then WiFi-join a camera (shared by stats/ls)."""
+    from bushdump import wifi
+
+    if cam.ble_address:
+        _wake_and_report(cam.ble_address, cam.name)
+    else:
+        print("No BLE address configured — skipping wake (turn WiFi on yourself).")
+    print(f"Joining WiFi '{cam.ssid}'...")
+    wifi.join(cam.ssid, cam.password)
+
+
+def _resolve_camera(name: str) -> config.Camera | None:
+    """Look up a camera by name; print an error and return None if not found."""
+    cfg = config.load_config()
+    cam = cfg.cameras.get(name)
+    if cam is None:
+        print(
+            f"Unknown camera {name!r}. Configured: {', '.join(cfg.cameras) or '(none)'}",
+            file=sys.stderr,
+        )
+    return cam
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
+    from bushdump.camera import CameraClient
+
+    cam = _resolve_camera(args.name)
+    if cam is None:
+        return 1
+    _wake_join(cam)
+    with CameraClient(cam.camera_host) as client:
+        print("Waiting for camera to respond...")
+        if not client.wait_until_ready():
+            print("Camera did not respond over HTTP — wrong network?", file=sys.stderr)
+            return 1
+        s = client.stats()
+    sd_pct = round(s.sd_used_mb / s.sd_total_mb * 100) if s.sd_total_mb else 0
+    ext = "  (ext power)" if s.ext_power else ""
+    print(f"Battery:     {s.battery}%{ext}")
+    print(f"Temperature: {s.temperature}°C")
+    print(f"SD card:     {s.sd_used_mb} / {s.sd_total_mb} MB used ({sd_pct}%)")
+    print(f"Files:       {s.photo_count} photos, {s.video_count} videos")
+    return 0
+
+
+def cmd_ls(args: argparse.Namespace) -> int:
+    from bushdump.camera import CameraClient
+
+    cam = _resolve_camera(args.name)
+    if cam is None:
+        return 1
+    _wake_join(cam)
+    with CameraClient(cam.camera_host) as client:
+        print("Waiting for camera to respond...")
+        if not client.wait_until_ready():
+            print("Camera did not respond over HTTP — wrong network?", file=sys.stderr)
+            return 1
+        state = config.load_state()
+        cam_state = state.get(cam.name, {})
+        total = 0
+        pending = 0
+        for media in MEDIA_TYPES:
+            watermark = cam_state.get(media)
+            available = list(client.iter_files(media))
+            to_dl = {f.id for f in sync.files_to_download(available, watermark)}
+            for f in available:
+                marker = "*" if f.id in to_dl else " "
+                size_kb = f.size // 1024
+                print(f"  {marker} {f.name}  {f.date}  {size_kb:>8} KB")
+                total += 1
+                if f.id in to_dl:
+                    pending += 1
+    print(f"\n{total} files on camera — {pending} would be downloaded (* = new).")
     return 0
 
 
@@ -89,7 +157,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
         cfg = config.load_config()
         if not cfg.cameras:
-            _out("No cameras configured. Run `bushdump add` first.", err=True)
+            _out("No cameras configured. Run `bushdump register` first.", err=True)
             return 1
 
         if args.name:
@@ -191,7 +259,7 @@ def _sorted_devices(devices: list[tuple[str, str | None]]) -> list[tuple[str, st
     return sorted(devices, key=lambda d: (d[1] is None, (d[1] or "").lower()))
 
 
-def cmd_discover(args: argparse.Namespace) -> int:
+def cmd_ble(args: argparse.Namespace) -> int:
     from bushdump import ble
 
     print(f"Watching for BLE devices for {args.timeout:.0f}s...")
@@ -325,9 +393,12 @@ def _prompt_name(prompt: str) -> str | None:
         return name
 
 
-def cmd_add(args: argparse.Namespace) -> int:
+def cmd_register(args: argparse.Namespace) -> int:
     from bushdump import wifi
     from bushdump.camera import CameraClient
+
+    if config.write_config_template():
+        print(f"Wrote config template to {config.CONFIG_PATH}")
 
     device = _pick_ble_device(args.timeout)
     if device is None:
@@ -377,17 +448,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    p_init = sub.add_parser("init", help="write a config template")
-    p_init.set_defaults(func=cmd_init)
+    p_cameras = sub.add_parser("cameras", help="list configured cameras")
+    p_cameras.set_defaults(func=cmd_cameras)
 
-    p_list = sub.add_parser("list", help="list configured cameras")
-    p_list.set_defaults(func=cmd_list)
+    p_ble = sub.add_parser("ble", help="scan for nearby BLE devices (read-only)")
+    p_ble.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
+    p_ble.set_defaults(func=cmd_ble)
 
-    p_discover = sub.add_parser("discover", help="list nearby BLE devices")
-    p_discover.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
-    p_discover.set_defaults(func=cmd_discover)
-
-    p_wifi = sub.add_parser("wifi", help="list WiFi networks (optionally wake a camera first)")
+    p_wifi = sub.add_parser(
+        "wifi",
+        help="scan for nearby WiFi networks (optionally BLE-wake a camera first)",
+    )
     p_wifi.add_argument(
         "target",
         nargs="?",
@@ -401,10 +472,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_wifi.set_defaults(func=cmd_wifi)
 
-    p_add = sub.add_parser("add", help="register a camera (guided; pick from live lists)")
-    p_add.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
-    p_add.add_argument("--wifi-timeout", type=float, default=8.0, help="WiFi watch seconds")
-    p_add.set_defaults(func=cmd_add)
+    p_stats = sub.add_parser("stats", help="show battery, SD usage, and file counts for a camera")
+    p_stats.add_argument("name", help="camera name (from `bd cameras`)")
+    p_stats.set_defaults(func=cmd_stats)
+
+    p_ls = sub.add_parser("ls", help="list files on the camera (* = would be downloaded)")
+    p_ls.add_argument("name", help="camera name (from `bd cameras`)")
+    p_ls.set_defaults(func=cmd_ls)
+
+    p_register = sub.add_parser(
+        "register",
+        help="register a new camera (guided; pick from live BLE+WiFi lists)",
+    )
+    p_register.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
+    p_register.add_argument("--wifi-timeout", type=float, default=8.0, help="WiFi watch seconds")
+    p_register.set_defaults(func=cmd_register)
 
     p_sync = sub.add_parser("sync", help="download new files from nearby cameras")
     p_sync.add_argument("name", nargs="?", help="sync only this camera (default: all nearby)")
