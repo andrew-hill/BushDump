@@ -1,7 +1,7 @@
 """HTTP client for the trail camera's local API.
 
 See docs/camera-api.md for the wire protocol. The camera serves unencrypted
-HTTP on its own WiFi AP (default 192.168.1.8).
+HTTP on its own WiFi AP (default 192.168.8.1:8080).
 """
 
 from __future__ import annotations
@@ -14,46 +14,53 @@ from pathlib import Path
 # httpx is imported lazily inside CameraClient so the pure helpers above
 # (CameraFile, parse_file_page) and the sync logic stay importable without it.
 
-DEFAULT_HOST = "192.168.1.8"
+DEFAULT_HOST = "192.168.8.1:8080"
 MediaType = str  # "Photo" | "Video"
+
+_MEDIA_TYPE_CODE = {"Photo": 1, "Video": 2}
 
 
 @dataclass(frozen=True, slots=True)
 class CameraFile:
-    """One entry from a /Storage?GetFilePage listing."""
+    """One entry from a /list/detail/forward listing."""
 
-    name: str  # "n"
-    timestamp: int  # "dt" — unix seconds
-    size: int  # "s" — bytes
-    fid: str  # "fid" — file ID used for download/thumb/delete
+    id: int
+    date: str  # e.g. "2026-05-10 13:00:01"
+    size: int  # bytes
+    type: int  # 1=JPG, 2=MP4
+
+    @property
+    def kind(self) -> str:
+        return "JPG" if self.type == 1 else "MP4"
+
+    @property
+    def name(self) -> str:
+        return f"{self.id:08d}.{self.kind.lower()}"
 
     @classmethod
     def from_json(cls, obj: dict) -> CameraFile:
         return cls(
-            name=obj["n"],
-            timestamp=int(obj["dt"]),
-            size=int(obj["s"]),
-            fid=str(obj["fid"]),
+            id=int(obj["id"]),
+            date=str(obj["date"]),
+            size=int(obj["size"]),
+            type=int(obj["type"]),
         )
 
 
 def parse_file_page(data: object) -> list[CameraFile]:
-    """Parse a GetFilePage response into CameraFiles.
+    """Parse a file listing response into CameraFiles.
 
-    The firmware's envelope isn't fully pinned down, so we tolerate either a
-    bare list or a dict wrapping the list under a common key. Entries missing
-    required fields are skipped. TODO: tighten once confirmed against a device.
+    Expects {"code": 0, "data": [...]}. Entries missing required fields are
+    skipped. Returns [] on any unexpected shape.
     """
-    if isinstance(data, dict):
-        for key in ("files", "Files", "list", "data"):
-            if isinstance(data.get(key), list):
-                data = data[key]
-                break
-    if not isinstance(data, list):
+    if not isinstance(data, dict):
+        return []
+    inner = data.get("data")
+    if not isinstance(inner, list):
         return []
     out: list[CameraFile] = []
-    for obj in data:
-        if isinstance(obj, dict) and {"n", "dt", "s", "fid"} <= obj.keys():
+    for obj in inner:
+        if isinstance(obj, dict) and {"id", "date", "size", "type"} <= obj.keys():
             out.append(CameraFile.from_json(obj))
     return out
 
@@ -80,14 +87,16 @@ class CameraClient:
     # --- readiness ---------------------------------------------------------
 
     def is_ready(self) -> bool:
-        """True if the camera HTTP server is responding."""
-        import httpx
-
+        """True if the camera HTTP server is responding and reports ready."""
         try:
-            self._client.get("/SetMode", params={"Storage": ""}, timeout=2.0)
-            return True
-        except httpx.HTTPError:
+            resp = self._client.get("/cmd/standby/reset", timeout=2.0)
+            return resp.status_code == 200 and resp.json().get("code") == 0
+        except Exception:
             return False
+
+    def keep_alive(self) -> None:
+        """Ping the camera to prevent it sleeping during a long download."""
+        self._client.get("/cmd/standby/reset")
 
     def wait_until_ready(self, timeout: float = 30.0, interval: float = 1.0) -> bool:
         """Poll until the camera answers HTTP, or give up after `timeout`s."""
@@ -100,20 +109,18 @@ class CameraClient:
 
     # --- API calls ---------------------------------------------------------
 
-    def enter_storage_mode(self) -> None:
-        self._client.get("/SetMode", params={"Storage": ""}).raise_for_status()
-
     def iter_files(self, media_type: MediaType) -> Iterator[CameraFile]:
         """Yield every file of a type, walking pages until one comes back empty."""
-        page = 0
+        type_code = _MEDIA_TYPE_CODE[media_type]
+        from_id = 0
         while True:
-            resp = self._client.get("/Storage", params={"GetFilePage": page, "type": media_type})
+            resp = self._client.get(f"/list/detail/forward/{from_id}/50")
             resp.raise_for_status()
-            files = parse_file_page(resp.json())
-            if not files:
+            all_files = parse_file_page(resp.json())
+            if not all_files:
                 return
-            yield from files
-            page += 1
+            yield from (f for f in all_files if f.type == type_code)
+            from_id = all_files[-1].id
 
     def download(self, file: CameraFile, dest_dir: Path) -> Path:
         """Stream a file to dest_dir. Skips if a same-size copy already exists."""
@@ -122,7 +129,7 @@ class CameraClient:
         if dest.exists() and dest.stat().st_size == file.size:
             return dest
         tmp = dest.with_suffix(dest.suffix + ".part")
-        with self._client.stream("GET", "/Storage", params={"Download": file.fid}) as resp:
+        with self._client.stream("GET", f"/file/{file.id}/{file.kind}") as resp:
             resp.raise_for_status()
             with tmp.open("wb") as fh:
                 for chunk in resp.iter_bytes():
@@ -131,15 +138,26 @@ class CameraClient:
         return dest
 
     def describe(self) -> str:
-        """One-line summary for the add-confirm step (best-effort file counts)."""
-        counts = []
-        for media in ("Photo", "Video"):
-            try:
-                counts.append(f"{sum(1 for _ in self.iter_files(media))} {media.lower()}s")
-            except Exception:
-                counts.append(f"? {media.lower()}s")
-        return f"camera at {self.host} — " + ", ".join(counts)
+        """One-line summary for the add-confirm step (best-effort)."""
+        label = f"camera at {self.host}"
+        try:
+            info = self._client.get("/cmd/info/1").json()
+            brand = info.get("data", {}).get("brand", "")
+            product = info.get("data", {}).get("product", "")
+            if brand or product:
+                label = " ".join(filter(None, [brand, product]))
+        except Exception:
+            pass
+        counts = ["? photos", "? videos"]
+        try:
+            counts_data = self._client.get("/cmd/info/3").json()
+            photo_count = counts_data.get("data", {}).get("photo", "?")
+            video_count = counts_data.get("data", {}).get("video", "?")
+            counts = [f"{photo_count} photos", f"{video_count} videos"]
+        except Exception:
+            pass
+        return f"{label} — " + ", ".join(counts)
 
     def power_off(self) -> None:
         """Turn the camera's WiFi off (saves its battery)."""
-        self._client.get("/Misc", params={"PowerOff": ""})
+        self._client.get("/cmd/standby/now")

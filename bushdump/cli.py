@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import time
 
 from bushdump import __version__, config, sync
 
@@ -97,9 +98,9 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
         if not client.wait_until_ready():
             print(f"  {cam.name}: camera did not respond over HTTP — skipping.", file=sys.stderr)
             return 0
-        client.enter_storage_mode()
 
         cam_state = state.setdefault(cam.name, {})
+        last_alive = time.monotonic()
         for media in MEDIA_TYPES:
             watermark = cam_state.get(media)
             available = list(client.iter_files(media))
@@ -107,6 +108,10 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> int:
             print(f"{media}: {len(todo)} new of {len(available)}")
             fetched = []
             for f in todo:
+                now = time.monotonic()
+                if now - last_alive > 15:
+                    client.keep_alive()
+                    last_alive = now
                 client.download(f, cam.output_dir)
                 fetched.append(f)
                 downloaded_count += 1
@@ -300,7 +305,6 @@ def cmd_add(args: argparse.Namespace) -> int:
         if not client.wait_until_ready():
             print("Camera didn't respond over HTTP — wrong network?", file=sys.stderr)
             return 1
-        client.enter_storage_mode()
         print("\nConnected: " + client.describe())
 
     name = _prompt_name("\nEnter a short name to save this camera (blank to discard): ")

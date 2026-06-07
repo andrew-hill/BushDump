@@ -4,29 +4,29 @@ from bushdump.camera import CameraFile
 from bushdump.sync import cameras_present, files_to_download, next_watermark
 
 
-def _file(fid: str, ts: int) -> CameraFile:
-    return CameraFile(name=f"{fid}.jpg", timestamp=ts, size=100, fid=fid)
+def _file(id: int) -> CameraFile:
+    return CameraFile(id=id, type=1, date="2026-05-10 13:00:01", size=100)
 
 
 def test_first_run_downloads_everything_oldest_first():
-    files = [_file("c", 30), _file("a", 10), _file("b", 20)]
+    files = [_file(3), _file(1), _file(2)]
     result = files_to_download(files, watermark=None)
-    assert [f.fid for f in result] == ["a", "b", "c"]
+    assert [f.id for f in result] == [1, 2, 3]
 
 
 def test_only_files_newer_than_watermark():
-    files = [_file("a", 10), _file("b", 20), _file("c", 30)]
-    result = files_to_download(files, watermark=20)
-    assert [f.fid for f in result] == ["c"]
+    files = [_file(1), _file(2), _file(3)]
+    result = files_to_download(files, watermark=2)
+    assert [f.id for f in result] == [3]
 
 
 def test_watermark_is_exclusive():
-    files = [_file("a", 20)]
-    assert files_to_download(files, watermark=20) == []
+    files = [_file(2)]
+    assert files_to_download(files, watermark=2) == []
 
 
 def test_next_watermark_takes_max():
-    downloaded = [_file("a", 10), _file("b", 30), _file("c", 20)]
+    downloaded = [_file(10), _file(30), _file(20)]
     assert next_watermark(downloaded, previous=15) == 30
 
 
@@ -35,7 +35,7 @@ def test_next_watermark_keeps_previous_when_nothing_downloaded():
 
 
 def test_next_watermark_first_run():
-    assert next_watermark([_file("a", 5)], previous=None) == 5
+    assert next_watermark([_file(5)], previous=None) == 5
 
 
 def _cam(name, ble):

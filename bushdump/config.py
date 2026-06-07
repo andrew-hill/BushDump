@@ -21,7 +21,7 @@ CONFIG_PATH = CONFIG_DIR / "config.toml"
 STATE_PATH = CONFIG_DIR / "state.json"
 
 DEFAULT_OUTPUT_DIR = "~/Pictures/BushDump"
-DEFAULT_PASSWORD = "12345678"
+DEFAULT_PASSWORD = "1234567890"
 
 CONFIG_TEMPLATE = f"""\
 # BushDump config — one entry per camera under [cameras.<name>].
