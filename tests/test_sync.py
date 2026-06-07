@@ -1,5 +1,7 @@
+from types import SimpleNamespace
+
 from bushdump.camera import CameraFile
-from bushdump.sync import files_to_download, next_watermark
+from bushdump.sync import cameras_present, files_to_download, next_watermark
 
 
 def _file(fid: str, ts: int) -> CameraFile:
@@ -34,3 +36,19 @@ def test_next_watermark_keeps_previous_when_nothing_downloaded():
 
 def test_next_watermark_first_run():
     assert next_watermark([_file("a", 5)], previous=None) == 5
+
+
+def _cam(name, ble):
+    return SimpleNamespace(name=name, ble_address=ble)
+
+
+def test_cameras_present_matches_case_insensitively():
+    cams = [_cam("front", "AAA-111"), _cam("back", "BBB-222")]
+    result = cameras_present(cams, {"aaa-111"})
+    assert [c.name for c in result] == ["front"]
+
+
+def test_cameras_present_skips_cameras_without_address():
+    cams = [_cam("noble", None), _cam("yes", "CCC")]
+    result = cameras_present(cams, {"ccc", "ddd"})
+    assert [c.name for c in result] == ["yes"]

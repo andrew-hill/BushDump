@@ -1,10 +1,11 @@
 # BushDump
 
-A simple CLI to dump photos and videos from a GardePro/Dsoon trail camera to
-your laptop over the camera's own WiFi — without using the phone app.
+A simple CLI to dump photos and videos from GardePro/Dsoon trail cameras to your
+laptop over each camera's own WiFi — without using the phone app.
 
-It wakes the camera's WiFi over Bluetooth, joins the access point, and pulls new
+It wakes a camera's WiFi over Bluetooth, joins the access point, and pulls new
 files using date-based incremental sync (only what you haven't already grabbed).
+Register several cameras and `./bd sync` grabs from whichever are nearby.
 
 > **Note:** BushDump copies files; it never deletes from the camera's SD card.
 
@@ -25,9 +26,27 @@ uv sync
 
 ## Usage
 
+`./bd` is a wrapper around the CLI so you don't have to type `uv run` each time.
+
+Register each camera once (guided — pick from live lists, no typing long codes):
+
 ```bash
-uv run bushdump --help
+./bd add        # detect a camera, pick its BLE device + WiFi, give it a name
+./bd list       # show configured cameras
 ```
+
+Then sync whenever you like:
+
+```bash
+./bd sync             # scan and sync every nearby configured camera
+./bd sync frontgate   # sync just one
+./bd discover         # read-only: live-list nearby BLE devices + WiFi networks
+./bd --help           # all commands and flags
+```
+
+> **macOS permissions:** the first BLE use prompts for Bluetooth access (approve
+> it). Listing WiFi networks needs Location Services — if it's off, `add` falls
+> back to typing the SSID manually.
 
 ## Development
 
@@ -37,8 +56,9 @@ uv run ruff check .      # lint
 uv run ruff format .     # format
 ```
 
-See [CLAUDE.md](CLAUDE.md) for contributor/agent guidance and
-[docs/camera-api.md](docs/camera-api.md) for the reverse-engineered camera API.
+See [AGENTS.md](AGENTS.md) for contributor/agent guidance (`CLAUDE.md` is a
+symlink to it) and [docs/camera-api.md](docs/camera-api.md) for the
+reverse-engineered camera API.
 
 ## License
 
