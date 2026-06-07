@@ -38,6 +38,7 @@ uv sync                              # install deps into .venv (first-time setup
 ./bd sync                            # scan and sync every nearby configured camera
 ./bd sync frontgate                  # sync just one camera
 ./bd sync --manual-wifi              # skip auto WiFi; prompt you to join each AP
+./bd keepalive <name>                # keep camera WiFi alive (pings every 10s; Ctrl+C to stop)
 uv run pytest                        # run tests
 uv run pytest tests/test_sync.py -q  # one file
 uv run ruff check .                  # lint
@@ -48,10 +49,10 @@ uv run ruff format .                 # format
 
 - `bushdump/ble.py` — BLE: `watch()` (live scan), `discover()` (snapshot), `wake_wifi()`; deps imported lazily
 - `bushdump/wifi.py` — macOS WiFi: list networks via CoreWLAN (`scan_ssids`/`watch_ssids`, Location-gated), join an AP via `networksetup` (no auto-restore)
-- `bushdump/camera.py` — HTTP client for `/Storage` + `/SetMode`; `httpx` imported lazily so pure helpers stay testable without it
+- `bushdump/camera.py` — HTTP client for the Linkiing platform (`/cmd/info/N`, `/list/detail/forward/`, `/file/`); `httpx` imported lazily so pure helpers stay testable without it
 - `bushdump/sync.py` — pure logic: `files_to_download`/`next_watermark` (watermark) and `cameras_present` (match scanned addresses to config)
 - `bushdump/config.py` — multi-camera config (`[cameras.<name>]`) + per-camera sync state
-- `bushdump/cli.py` — subcommands (`cameras`, `ble`, `wifi`, `stats`, `ls`, `register`, `sync`); orchestrates the flows
+- `bushdump/cli.py` — subcommands (`cameras`, `ble`, `wifi`, `stats`, `ls`, `keepalive`, `register`, `sync`); orchestrates the flows
 - `tests/` — pytest; pure logic only, no real camera/BLE/WiFi needed
 - `docs/camera-api.md` — the reverse-engineered camera API reference
 - `docs/camera-models.md` — registry of which models have been confirmed against `camera-api.md`
@@ -68,7 +69,7 @@ Each camera is a `[cameras.<name>]` section (short human name) with its own
 `sync` (no name): BLE-scan for presence → `cameras_present` matches configured
 cameras by stored address → sync each. `sync <name>` targets one directly. Per
 camera: BLE wake → join AP (retries until up) → **poll** camera HTTP until ready
-→ storage mode → per media type list+paginate, download files newer than the
+→ per media type list+paginate, download files newer than the
 saved watermark → save watermark → power off camera WiFi. We do **not**
 auto-restore your normal WiFi — the laptop stays on the (last) camera's AP; you
 rejoin your usual network yourself. Races are handled by polling, not fixed
