@@ -33,13 +33,21 @@ shape described in `camera-api.md`. Per-model deviations called out below.
   unconfirmed but follows the convention.
 - HTTP file download (`/file/<id>/JPG`) not yet exercised end-to-end.
 
-### GardePro E8 2.0 Pro — 🟡 Partial
+### GardePro E8 2 — 🟡 Partial
 
-- BLE peripheral name: `CAM8Z8_<location>_G_E8`
+- BLE peripheral name: `CAM8Z8_<location>_G_E8 2`
 - WiFi SSID: `CAM8Z8_<wifi-mac-hex>` (e.g. `CAM8Z8_A4C13896B3B0`)
 - WPA2 join: ✅ confirmed with `1234567890`
-- BLE wake: not yet directly probed; AP came up after some interaction —
-  assume it's the same as E6PMB until probed.
+- Hardware: `LK8625_V1.6`, firmware `v1.0.5`, manufacturer Shenzhen Linkiing
+  Technology Co.,Ltd.
+- BLE wake char: `6e400004-b5a3-f393-e0a9-e50e24dcca9e`, same as E6PMB.
+  **Does not send `OK\r\n` ack** — the "no ack" message from `bd wake` is
+  normal; the AP still comes up.
+- ⚠️ **Wake reliability unclear**: required multiple `bd wake` attempts before
+  the AP appeared in practice. Unclear if this is a timing issue (the AT
+  command needs repeating), a BLE connection race, or something else. HTTP
+  sync after manual WiFi join worked fine once up. Worth investigating whether
+  retrying the write or adding a delay helps.
 - HTTP API: not yet probed; assumed identical to E6PMB pending verification.
 
 ### GardePro E9P — 📚 Reported

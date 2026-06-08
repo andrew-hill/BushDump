@@ -438,7 +438,7 @@ def _wake_and_report(address: str, label: str) -> None:
         _out(f"  (BLE wake failed: {e})")
         return
     if reply is None:
-        _out("  (camera didn't ack — the wake may not have taken effect)")
+        _out("  (no ack from camera — WiFi may still be coming up)")
         return
     try:
         text = reply.decode("utf-8").strip()
