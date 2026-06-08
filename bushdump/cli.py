@@ -571,19 +571,19 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="""
   Setup:
-    cameras     list configured cameras
-    register    register a new camera (guided)
+    cameras, cams     list configured cameras
+    register, reg     register a new camera (guided)
 
   Sync:
-    ls          list files on the camera (* = would be downloaded)
-    sync        download new files from nearby cameras
+    ls                list files on the camera (* = would be downloaded)
+    sync, s           download new files from nearby cameras
 
   Inspect and Troubleshoot:
-    ble         scan for nearby BLE devices
-    wifi        scan for nearby WiFi networks
-    wake        wake a camera's WiFi over BLE
-    stats       show battery, SD usage, and file counts
-    keepalive   keep the camera's WiFi alive (Ctrl+C to stop)
+    ble               scan for nearby BLE devices
+    wifi              scan for nearby WiFi networks
+    wake, w           wake a camera's WiFi over BLE
+    stats, st         show battery, SD usage, and file counts
+    keepalive, ka     keep the camera's WiFi alive (Ctrl+C to stop)
 """,
         usage="%(prog)s [--version] <command> ...",
         add_help=False,
@@ -598,7 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>", help=argparse.SUPPRESS)
 
-    p_cameras = sub.add_parser("cameras", help="list configured cameras")
+    p_cameras = sub.add_parser("cameras", aliases=["cams"], help="list configured cameras")
     p_cameras.set_defaults(func=cmd_cameras)
 
     p_ble = sub.add_parser("ble", help="scan for nearby BLE devices (read-only)")
@@ -614,11 +614,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_wifi.set_defaults(func=cmd_wifi)
 
-    p_wake = sub.add_parser("wake", help="wake a camera's WiFi over BLE")
+    p_wake = sub.add_parser("wake", aliases=["w"], help="wake a camera's WiFi over BLE")
     p_wake.add_argument("name", help="camera name (from `bd cameras`)")
     p_wake.set_defaults(func=cmd_wake)
 
-    p_stats = sub.add_parser("stats", help="show battery, SD usage, and file counts for a camera")
+    p_stats = sub.add_parser(
+        "stats",
+        aliases=["st"],
+        help="show battery, SD usage, and file counts for a camera",
+    )
     p_stats.add_argument("name", help="camera name (from `bd cameras`)")
     p_stats.set_defaults(func=cmd_stats)
 
@@ -626,7 +630,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_ls.add_argument("name", help="camera name (from `bd cameras`)")
     p_ls.set_defaults(func=cmd_ls)
 
-    p_keepalive = sub.add_parser("keepalive", help="keep the camera's WiFi alive (Ctrl+C to stop)")
+    p_keepalive = sub.add_parser(
+        "keepalive",
+        aliases=["ka"],
+        help="keep the camera's WiFi alive (Ctrl+C to stop)",
+    )
     p_keepalive.add_argument("name", help="camera name (from `bd cameras`)")
     p_keepalive.add_argument(
         "--interval",
@@ -638,13 +646,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_register = sub.add_parser(
         "register",
+        aliases=["reg"],
         help="register a new camera (guided; pick from live BLE+WiFi lists)",
     )
     p_register.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
     p_register.add_argument("--wifi-timeout", type=float, default=8.0, help="WiFi watch seconds")
     p_register.set_defaults(func=cmd_register)
 
-    p_sync = sub.add_parser("sync", help="download new files from nearby cameras")
+    p_sync = sub.add_parser("sync", aliases=["s"], help="download new files from nearby cameras")
     p_sync.add_argument("name", nargs="?", help="sync only this camera (default: all nearby)")
     p_sync.add_argument(
         "--manual-wifi",
