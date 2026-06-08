@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime
+import subprocess
 import sys
 import time
 import traceback
@@ -205,6 +206,10 @@ def cmd_sync(args: argparse.Namespace) -> int:
     log = _open_log(args.log)
     _log_file = log
     try:
+        caffeine = subprocess.Popen(["caffeinate", "-i"])
+    except Exception:
+        caffeine = None
+    try:
         if log:
             _out(f"Logging to {log.name}")
 
@@ -259,6 +264,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
         _out("(Still on the camera's WiFi — rejoin your normal network when you're done.)")
         return 1 if failed else 0
     finally:
+        if caffeine is not None:
+            caffeine.terminate()
         if log:
             log.close()
         _log_file = None
