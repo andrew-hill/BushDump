@@ -9,6 +9,15 @@ Register several cameras and `./bd sync` grabs from whichever are nearby.
 
 > **Note:** BushDump copies files; it never deletes from the camera's SD card.
 
+## Why "BushDump"?
+
+Trail cameras are used in the bush — strapped to trees, watching game trails,
+sitting out in the weather for weeks. When you finally hike out to check them,
+the job is simple: dump whatever's on the card. BushDump is that job, automated.
+The name doubles as a mild joke at the expense of every proprietary phone app
+that insists on cloud uploads, accounts, and subscriptions for what is
+fundamentally a file copy.
+
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) for dependency management. On macOS:
