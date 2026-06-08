@@ -370,40 +370,32 @@ def cmd_ble(args: argparse.Namespace) -> int:
 def cmd_wifi(args: argparse.Namespace) -> int:
     from bushdump import wifi
 
-    if args.target:
-        if "-" in args.target or ":" in args.target:
-            # Literal BLE address — works before registration.
-            address, label = args.target, args.target
-        else:
-            # Camera name — requires config.
-            cfg = config.load_config()
-            cam = cfg.cameras.get(args.target)
-            if cam is None:
-                configured = ", ".join(cfg.cameras) or "(none)"
-                print(
-                    f"Unknown camera {args.target!r}. Configured: {configured}",
-                    file=sys.stderr,
-                )
-                return 1
-            if not cam.ble_address:
-                print(
-                    f"Camera {args.target!r} has no BLE address configured.",
-                    file=sys.stderr,
-                )
-                return 1
-            address, label = cam.ble_address, f"{args.target} ({cam.ble_address})"
-        _wake_and_report(address, label)
-
     if not wifi.corewlan_available():
         print("WiFi scan unavailable — Location permission off?", file=sys.stderr)
         return 1
-    # When we just woke a camera, give macOS longer to re-scan and surface the
-    # new AP — its background scan can take ~15s to spot a network that just
-    # came up.
-    timeout = args.timeout if args.timeout is not None else (20.0 if args.target else 8.0)
+    timeout = args.timeout if args.timeout is not None else 8.0
     print(f"Watching for WiFi networks for {timeout:.0f}s...")
     if not wifi.watch_ssids(timeout, _print_wifi_found):
         print("  (none found)")
+    return 0
+
+
+def cmd_wake(args: argparse.Namespace) -> int:
+    from bushdump import wifi
+
+    cam = _resolve_camera(args.name)
+    if cam is None:
+        return 1
+    if not cam.ble_address:
+        print(f"Camera {args.name!r} has no BLE address configured.", file=sys.stderr)
+        return 1
+    _wake_and_report(cam.ble_address, cam.name)
+    if cam.ssid and wifi.corewlan_available():
+        print(f"Waiting for AP '{cam.ssid}' to appear...")
+        if wifi.wait_for_ssid(cam.ssid, 20.0):
+            print(f"AP '{cam.ssid}' is up.")
+        else:
+            print(f"AP '{cam.ssid}' did not appear within 20s.")
     return 0
 
 
@@ -537,13 +529,35 @@ def cmd_register(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bushdump",
-        description="Dump photos/videos off trail cameras over their WiFi APs.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="""
+  Setup:
+    cameras     list configured cameras
+    register    register a new camera (guided)
+
+  Sync:
+    ls          list files on the camera (* = would be downloaded)
+    sync        download new files from nearby cameras
+
+  Inspect and Troubleshoot:
+    ble         scan for nearby BLE devices
+    wifi        scan for nearby WiFi networks
+    wake        wake a camera's WiFi over BLE
+    stats       show battery, SD usage, and file counts
+    keepalive   keep the camera's WiFi alive (Ctrl+C to stop)
+""",
         usage="%(prog)s [--version] <command> ...",
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        default=argparse.SUPPRESS,
+        help="show this message and exit; use after a command for command-specific help and usage",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    sub = parser.add_subparsers(
-        dest="command", title="commands", metavar="  ./bd <command> -h for per-command options"
-    )
+    sub = parser.add_subparsers(dest="command", metavar="<command>", help=argparse.SUPPRESS)
 
     p_cameras = sub.add_parser("cameras", help="list configured cameras")
     p_cameras.set_defaults(func=cmd_cameras)
@@ -552,22 +566,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_ble.add_argument("--timeout", type=float, default=10.0, help="BLE watch seconds")
     p_ble.set_defaults(func=cmd_ble)
 
-    p_wifi = sub.add_parser(
-        "wifi",
-        help="scan for nearby WiFi networks (optionally BLE-wake a camera first)",
-    )
-    p_wifi.add_argument(
-        "target",
-        nargs="?",
-        help="camera name (from config) or BLE address to wake before scanning",
-    )
+    p_wifi = sub.add_parser("wifi", help="scan for nearby WiFi networks (read-only)")
     p_wifi.add_argument(
         "--timeout",
         type=float,
         default=None,
-        help="WiFi watch seconds (default: 20 if waking a camera, 8 otherwise)",
+        help="WiFi watch seconds (default: 8)",
     )
     p_wifi.set_defaults(func=cmd_wifi)
+
+    p_wake = sub.add_parser("wake", help="wake a camera's WiFi over BLE")
+    p_wake.add_argument("name", help="camera name (from `bd cameras`)")
+    p_wake.set_defaults(func=cmd_wake)
 
     p_stats = sub.add_parser("stats", help="show battery, SD usage, and file counts for a camera")
     p_stats.add_argument("name", help="camera name (from `bd cameras`)")

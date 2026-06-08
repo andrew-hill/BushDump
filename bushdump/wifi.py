@@ -85,6 +85,16 @@ def watch_ssids(
     return rank_ssids(list(seen), name_hint)
 
 
+def wait_for_ssid(ssid: str, timeout: float = 20.0) -> bool:
+    """Poll CoreWLAN until `ssid` appears or `timeout` expires. Returns True if found."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ssid in _scan_once():
+            return True
+        time.sleep(0.5)
+    return False
+
+
 # --- joining / leaving an AP (networksetup) --------------------------------
 
 
