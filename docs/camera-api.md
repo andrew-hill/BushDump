@@ -158,12 +158,12 @@ incrementing the `GetFilePage` page index until an empty page comes back.
 
 ## References
 
-- github.com/vondruska/gardepro-fetcher — Linkiing platform; traffic analysis
+- https://github.com/vondruska/gardepro-fetcher — Linkiing platform; traffic analysis
   vs. GardePro E9P; source of the `AT+WAKEPULSE=10` claim and the `/cmd` +
   `/list` + `/file` endpoint list.
-- github.com/fede2cr/camtrap-control — Linkiing platform; independent Python
+- https://github.com/fede2cr/camtrap-control — Linkiing platform; independent Python
   client useful for cross-checking endpoint shapes and JSON conventions.
-- geekitguide.com/wifi-ble-trailcam-investigation-part-2 — legacy OEM;
+- https://geekitguide.com/wifi-ble-trailcam-investigation-part-2 — legacy OEM;
   source of the `BT_Key_On`/`0xFF01` wake and the `/Storage` endpoints.
-- github.com/fearthis4/wifi-ble-trailcam-investigations — legacy OEM;
+- https://github.com/fearthis4/wifi-ble-trailcam-investigations — legacy OEM;
   companion to the geekitguide write-up.
