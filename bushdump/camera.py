@@ -205,6 +205,10 @@ class CameraClient:
                 if candidate.stat().st_size == file.size:
                     return None  # already downloaded under this suffix
                 counter += 1
+        # .part keeps dest absent until the write is complete, so an interrupted
+        # run leaves dest.exists() False and the next run retries cleanly.
+        # The size check before rename catches silent truncations (camera closes
+        # the stream early without raising), which .part alone cannot detect.
         tmp = dest.with_suffix(dest.suffix + ".part")
         for attempt in range(2):
             try:
@@ -220,6 +224,12 @@ class CameraClient:
                 tmp.unlink(missing_ok=True)
                 self._client.close()
                 self._client = httpx.Client(base_url=self.base_url, timeout=self._timeout)
+        actual = tmp.stat().st_size
+        if actual != file.size:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"Incomplete download: {file.name} expected {file.size} B, got {actual} B"
+            )
         tmp.replace(dest)
         return dest
 

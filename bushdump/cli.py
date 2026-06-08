@@ -221,6 +221,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 )
                 return 1
             cameras = [cfg.cameras[args.name]]
+        elif args.manual_wifi:
+            # Skip BLE discovery — manual mode is the escape hatch for when
+            # BLE is unavailable or cameras have no stored address.
+            cameras = list(cfg.cameras.values())
+            _out(f"Manual WiFi mode — will prompt for: {', '.join(c.name for c in cameras)}")
         else:
             _out("Scanning for nearby cameras...")
             present = {addr for addr, _ in asyncio.run(ble.discover(timeout=args.scan_timeout))}
@@ -233,6 +238,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         state = config.load_state()
         total = 0
         all_conflicts: list[str] = []
+        failed = False
         for cam in cameras:
             try:
                 n, conflicts = _sync_one(cam, state, args)
@@ -245,13 +251,13 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 return 1
             except Exception:
                 _out(traceback.format_exc(), err=True)
-                return 1
+                failed = True
 
         _out(f"\nDone — {total} new file(s).")
         if all_conflicts:
             _out_conflicts(all_conflicts)
         _out("(Still on the camera's WiFi — rejoin your normal network when you're done.)")
-        return 0
+        return 1 if failed else 0
     finally:
         if log:
             log.close()
@@ -363,14 +369,20 @@ def cmd_wifi(args: argparse.Namespace) -> int:
     from bushdump import wifi
 
     if args.target:
-        cfg = config.load_config()
-        address, label = _resolve_ble_target(args.target, cfg.cameras)
-        if address is None:
-            print(
-                f"Unknown camera {args.target!r}. Configured: {', '.join(cfg.cameras) or '(none)'}",
-                file=sys.stderr,
-            )
-            return 1
+        if "-" in args.target or ":" in args.target:
+            # Literal BLE address — works before registration.
+            address, label = args.target, args.target
+        else:
+            # Camera name — requires config.
+            cfg = config.load_config()
+            address, label = _resolve_ble_target(args.target, cfg.cameras)
+            if address is None:
+                configured = ", ".join(cfg.cameras) or "(none)"
+                print(
+                    f"Unknown camera {args.target!r}. Configured: {configured}",
+                    file=sys.stderr,
+                )
+                return 1
         _wake_and_report(address, label)
 
     if not wifi.corewlan_available():
