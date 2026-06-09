@@ -140,6 +140,72 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_settings(args: argparse.Namespace) -> int:
+    from bushdump.camera import CameraClient
+
+    cam = _resolve_camera(args.name)
+    if cam is None:
+        return 1
+    _wake_join(cam)
+    with CameraClient(cam.camera_host) as client:
+        print("Waiting for camera to respond...")
+        if not client.wait_until_ready():
+            print("Camera did not respond over HTTP — wrong network?", file=sys.stderr)
+            return 1
+        print("Camera ready.")
+        try:
+            settings = client.get_settings()
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            return 1
+    for key, value in settings.items():
+        print(f"{key}: {value}")
+    return 0
+
+
+def cmd_clock(args: argparse.Namespace) -> int:
+    import json
+
+    from bushdump.camera import CameraClient
+
+    cam = _resolve_camera(args.name)
+    if cam is None:
+        return 1
+    _wake_join(cam)
+    with CameraClient(cam.camera_host) as client:
+        print("Waiting for camera to respond...")
+        if not client.wait_until_ready():
+            print("Camera did not respond over HTTP — wrong network?", file=sys.stderr)
+            return 1
+        print("Camera ready.")
+        now_utc = datetime.datetime.now(datetime.UTC)
+        now_local = datetime.datetime.now()
+        print(f"Laptop UTC:   {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Laptop local: {now_local.strftime('%Y-%m-%d %H:%M:%S')}")
+        print("Camera /cmd/info/4:")
+        print(json.dumps(client.time_info(), indent=2))
+
+        if not args.sync:
+            return 0
+
+        sync_time = datetime.datetime.now(datetime.UTC)
+        try:
+            answer = input(
+                f"\nSet camera clock to {sync_time.strftime('%Y-%m-%d %H:%M:%S')} UTC? [y/N] "
+            )
+        except (EOFError, KeyboardInterrupt):
+            print("\nCancelled.")
+            return 0
+        if answer.strip().lower() != "y":
+            print("Cancelled.")
+            return 0
+
+        client.set_clock(sync_time)
+        print("\nCamera /cmd/info/4 after sync:")
+        print(json.dumps(client.time_info(), indent=2))
+    return 0
+
+
 def cmd_ls(args: argparse.Namespace) -> int:
     from bushdump.camera import CameraClient
 
@@ -630,6 +696,8 @@ def build_parser() -> argparse.ArgumentParser:
     wifi              scan for nearby WiFi networks
     wake, w           wake a camera's WiFi over BLE
     stats, st         show battery, SD usage, and file counts
+    settings          show current camera settings (read-only)
+    clock             show raw camera clock response; optionally sync to UTC
     keepalive, ka     keep the camera's WiFi alive (Ctrl+C to stop)
 """,
         usage="%(prog)s [--version] <command> ...",
@@ -672,6 +740,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_stats.add_argument("name", help="camera name (from `bd cameras`)")
     p_stats.set_defaults(func=cmd_stats)
+
+    p_settings = sub.add_parser(
+        "settings",
+        help="show current camera settings (read-only)",
+    )
+    p_settings.add_argument("name", help="camera name (from `bd cameras`)")
+    p_settings.set_defaults(func=cmd_settings)
+
+    p_clock = sub.add_parser(
+        "clock",
+        help="show raw camera clock response; optionally sync to UTC",
+    )
+    p_clock.add_argument("name", help="camera name (from `bd cameras`)")
+    p_clock.add_argument(
+        "--sync",
+        action="store_true",
+        help="set camera clock to current UTC, show before/after response",
+    )
+    p_clock.set_defaults(func=cmd_clock)
 
     p_ls = sub.add_parser("ls", help="list files on the camera (* = would be downloaded)")
     p_ls.add_argument("name", help="camera name (from `bd cameras`)")

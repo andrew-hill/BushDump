@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 # httpx is imported lazily inside CameraClient so the pure helpers above
@@ -267,6 +268,33 @@ class CameraClient:
         except Exception:
             pass
         return f"{label} — " + ", ".join(counts)
+
+    def get_settings(self) -> dict:
+        """Fetch current camera settings from /cmd/getSetting.
+
+        Returns the unwrapped data dict. Raises RuntimeError if the response
+        is not the expected {"code": 0, "data": {...}} envelope.
+        """
+        resp = self._client.get("/cmd/getSetting")
+        resp.raise_for_status()
+        body = resp.json()
+        if not isinstance(body, dict) or body.get("code") != 0 or not isinstance(
+            body.get("data"), dict
+        ):
+            raise RuntimeError(f"Unexpected response from /cmd/getSetting: {body!r}")
+        return body["data"]
+
+    def time_info(self) -> dict:
+        """Return the raw /cmd/info/4 response (clock + timezone).
+
+        Response shape varies by firmware — returned as-is for the caller to inspect.
+        """
+        return self._client.get("/cmd/info/4").json()
+
+    def set_clock(self, when: datetime) -> None:
+        """Set camera clock via POST /cmd/setGmtClock. Pass a UTC datetime."""
+        payload = when.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
+        self._client.post("/cmd/setGmtClock", json={"data": payload})
 
     def power_off(self) -> None:
         """Turn the camera's WiFi off (saves its battery)."""
