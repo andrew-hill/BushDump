@@ -266,6 +266,7 @@ def cmd_keepalive(args: argparse.Namespace) -> int:
 
 def cmd_sync(args: argparse.Namespace) -> int:
     global _log_file, _verbose
+    import httpx
     from bushdump import ble
 
     _verbose = args.verbose
@@ -329,6 +330,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
                 if all_conflicts:
                     _out_conflicts(all_conflicts)
                 return 1
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError,
+                    RuntimeError):
+                lines = traceback.format_exc().strip().splitlines()
+                _out("\n".join(lines[-4:]), err=True)
+                failed = True
             except Exception:
                 _out(traceback.format_exc(), err=True)
                 failed = True
@@ -831,6 +837,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         return args.func(args)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 1
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
     except FileNotFoundError as e:
         print(e, file=sys.stderr)
         return 1

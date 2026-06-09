@@ -10,6 +10,8 @@
 - [ ] Add appropriate credits to README.md for info + code sourced from other users
       (license-appropriate, or in the spirit of BSD/MIT-style license or academic
       reference where repos lack a license)
+- [ ] Add more graceful error handling to avoid large trace outputs from reasonably
+      expected issues.
 
 ## Next-visit camera smoke tests
 
