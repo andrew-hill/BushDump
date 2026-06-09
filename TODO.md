@@ -1,8 +1,17 @@
 # TODO
 
 - [ ] Add time check + sync (check method in github.com/fede2cr/camtrap-control/)
-- [ ] Add command to read + display camera settings/configuration - any/all available (check method in github.com/fede2cr/camtrap-control/)
-- [ ] Review how camtrap-control implements SHA-256 validation to see if it would be useful to include in our sync for verification
+      Consider doing automatically upon any connection if time is out-of-sync,
+      or via user-prompt to confirm, subject to a signal that the client is
+      genuinely in-sync (e.g. via NTP).
+- [ ] Add command to read + display camera settings/configuration.
+      Consider any/all available settings (check method in github.com/fede2cr/camtrap-control/
+      and probe each camera for variations by model/firmware)
+- [ ] Review how camtrap-control implements SHA-256 validation to see if it would
+      be useful to include in our sync for verification
+- [ ] Add appropriate credits to README.md for info + code sourced from other users
+      (license-appropriate, or in the spirit of BSD/MIT-style license or academic
+      reference where repos lack a license)
 
 ## Next-visit camera smoke tests
 
