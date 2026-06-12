@@ -9,10 +9,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime
+import functools
 import subprocess
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from typing import IO
 
 from bushdump import __version__, config, sync
@@ -75,6 +77,28 @@ def _open_log(spec: str | None) -> IO[str] | None:
     return path.open("w", encoding="utf-8")
 
 
+def _is_expected_camera_error(exc: Exception) -> bool:
+    """True for routine camera/network failures that should not print a traceback."""
+    module = type(exc).__module__
+    return isinstance(exc, (RuntimeError, FileNotFoundError)) or module.startswith("httpx")
+
+
+def _handle_expected_camera_errors(
+    func: Callable[[argparse.Namespace], int],
+) -> Callable[[argparse.Namespace], int]:
+    @functools.wraps(func)
+    def wrapper(args: argparse.Namespace) -> int:
+        try:
+            return func(args)
+        except Exception as e:
+            if not _is_expected_camera_error(e):
+                raise
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    return wrapper
+
+
 def cmd_cameras(args: argparse.Namespace) -> int:
     cfg = config.load_config()
     if not cfg.cameras:
@@ -115,6 +139,7 @@ def _resolve_camera(name: str) -> config.Camera | None:
     return cam
 
 
+@_handle_expected_camera_errors
 def cmd_stats(args: argparse.Namespace) -> int:
     from bushdump.camera import CameraClient
 
@@ -140,6 +165,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+@_handle_expected_camera_errors
 def cmd_settings(args: argparse.Namespace) -> int:
     from bushdump.camera import CameraClient
 
@@ -163,6 +189,7 @@ def cmd_settings(args: argparse.Namespace) -> int:
     return 0
 
 
+@_handle_expected_camera_errors
 def cmd_clock(args: argparse.Namespace) -> int:
     import json
 
@@ -206,6 +233,7 @@ def cmd_clock(args: argparse.Namespace) -> int:
     return 0
 
 
+@_handle_expected_camera_errors
 def cmd_ls(args: argparse.Namespace) -> int:
     from bushdump.camera import CameraClient
 
@@ -221,7 +249,12 @@ def cmd_ls(args: argparse.Namespace) -> int:
         print("Camera ready.")
         state = config.load_state()
         cam_state = state.get(cam.name, {})
-        all_files = client.list_all_files()
+        print("Listing files...")
+
+        def on_page(n: int) -> None:
+            print(f"  ... {n} files")
+
+        all_files = client.list_all_files(on_page=on_page)
         total = 0
         pending = 0
         for media in MEDIA_TYPES:
@@ -240,6 +273,7 @@ def cmd_ls(args: argparse.Namespace) -> int:
     return 0
 
 
+@_handle_expected_camera_errors
 def cmd_keepalive(args: argparse.Namespace) -> int:
     from bushdump.camera import CameraClient
 
@@ -388,12 +422,9 @@ def _sync_one(cam: config.Camera, state: dict, args: argparse.Namespace) -> tupl
         conflicts: list[str] = []
         last_alive = time.monotonic()
         _out("Listing files...")
-        _listing_pages: list[int] = []
 
         def _on_page(n: int) -> None:
-            _listing_pages.append(n)
-            if len(_listing_pages) > 1:
-                _out(f"  … {n} files")
+            _out(f"  … {n} files")
 
         all_files = client.list_all_files(on_page=_on_page)
         for media in MEDIA_TYPES:

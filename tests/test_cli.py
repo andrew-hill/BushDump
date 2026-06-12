@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from bushdump import cli
+from bushdump.camera import CameraFile
 
 
 def test_command_aliases_resolve_to_canonical_handlers():
@@ -108,6 +109,61 @@ def test_settings_api_error_returns_nonzero(capsys):
 
     assert result == 1
     assert "bad response" in capsys.readouterr().err
+
+
+def test_stats_expected_camera_error_returns_nonzero_without_traceback(capsys):
+    mock_cam = MagicMock()
+    mock_cam.camera_host = "192.168.8.1:8080"
+    client = MagicMock()
+    client.wait_until_ready.return_value = True
+    client.stats.side_effect = RuntimeError("camera dropped connection")
+    client.__enter__ = lambda s: client
+    client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("bushdump.cli._resolve_camera", return_value=mock_cam),
+        patch("bushdump.cli._wake_join"),
+        patch("bushdump.camera.CameraClient", return_value=client),
+    ):
+        args = cli.build_parser().parse_args(["stats", "frontgate"])
+        result = args.func(args)
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Error: camera dropped connection" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_ls_prints_listing_progress(capsys):
+    mock_cam = MagicMock()
+    mock_cam.name = "frontgate"
+    mock_cam.camera_host = "192.168.8.1:8080"
+    client = MagicMock()
+    client.wait_until_ready.return_value = True
+
+    def list_all_files(on_page=None):
+        on_page(50)
+        on_page(75)
+        return [CameraFile(id=1, type=1, date="2026-05-10 13:00:01", size=2048)]
+
+    client.list_all_files.side_effect = list_all_files
+    client.__enter__ = lambda s: client
+    client.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("bushdump.cli._resolve_camera", return_value=mock_cam),
+        patch("bushdump.cli._wake_join"),
+        patch("bushdump.config.load_state", return_value={}),
+        patch("bushdump.camera.CameraClient", return_value=client),
+    ):
+        args = cli.build_parser().parse_args(["ls", "frontgate"])
+        result = args.func(args)
+
+    assert result == 0
+    out = capsys.readouterr().out
+    assert "Listing files..." in out
+    assert "  ... 75 files" in out
+    assert "1 files on camera" in out
 
 
 def test_command_aliases_preserve_arguments():
