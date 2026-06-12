@@ -53,12 +53,12 @@ def _sidecar(path: Path) -> Path:
     return path.with_name(path.name + ".error.txt")
 
 
-def _extract_timelapse_meta(path: Path) -> Path | None:
-    """Extract the COM block after EOI on timelapse JPEGs to a .timelapse.bin sidecar.
+def _extract_com_block(path: Path) -> Path | None:
+    """Extract the COM block after EOI to a .COM.bin sidecar for offline analysis.
 
     Returns the sidecar path if written, else None.
     """
-    sidecar = path.with_name(path.name + ".timelapse.bin")
+    sidecar = path.with_name(path.name + ".COM.bin")
     if sidecar.exists():
         return None
     data = path.read_bytes()
@@ -88,6 +88,11 @@ def main() -> None:
     )
     parser.add_argument(
         "paths", nargs="+", type=Path, metavar="PATH", help="Files or directories to validate"
+    )
+    parser.add_argument(
+        "--extract-com",
+        action="store_true",
+        help="Extract COM blocks after EOI to .COM.bin sidecars (timelapse JPEGs only)",
     )
     args = parser.parse_args()
 
@@ -119,8 +124,8 @@ def main() -> None:
                 print(f"  FAIL  {f}  ({elapsed:.2f}s)")
                 for r in reasons:
                     print(f"        {r}")
-            if _kind(f) == "JPG":
-                meta_path = _extract_timelapse_meta(f)
+            if args.extract_com and _kind(f) == "JPG":
+                meta_path = _extract_com_block(f)
                 if meta_path:
                     print(f"  meta  {f.name} → {meta_path.name}")
     except KeyboardInterrupt:

@@ -12,9 +12,6 @@
       validation because libjpeg's error concealment fills in corrupted MCUs with
       plausible-looking repeated rows. Would need to detect large runs of identical
       MCU rows or similar heuristic to catch partial-download / bit-flip corruption.
-- [ ] regular validation shouldn't produce the .timelapse.bin files - let's keep that
-      just in the tools script, and rename it to COM.bin or something more correct
-
 ## Next-visit camera smoke tests
 
 ### `bd sync --retry`

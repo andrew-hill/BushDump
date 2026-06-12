@@ -105,8 +105,8 @@ Known record fields (little-endian):
 | 8–11   | `uint32` | varies per file — possible per-frame exposure or quality metric |
 | 12–15  | `uint32` | varies per file — possible per-frame exposure or quality metric |
 
-Full field semantics are unknown. `tools/validate-files.py` extracts this block
-to a `<filename>.timelapse.bin` sidecar for offline analysis.
+Full field semantics are unknown. Pass `--extract-com` to `tools/validate-files.py`
+to extract this block to a `<filename>.COM.bin` sidecar for offline analysis.
 
 ### `/cmd/format/result` response
 
