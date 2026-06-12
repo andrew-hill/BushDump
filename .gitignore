@@ -22,3 +22,5 @@ state.json
 
 # macOS
 .DS_Store
+plans
+logs
