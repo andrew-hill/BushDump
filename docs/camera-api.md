@@ -86,9 +86,12 @@ Pagination: `/list/detail/forward/<from_id>/<page_size>` returns files with
 Keep-alive: hit `/cmd/standby/reset` every ~20s during a sync, otherwise the
 camera will idle out and drop the AP mid-download.
 
-### Timelapse JPEG metadata
+### Additional JPEG metadata (proprietary)
 
-Observed on timelapse-mode JPEGs; absent on manually-triggered captures.
+In JPG files from available GardePro cameras, the EXIF/MakerNote payload
+also carries an ASCII timezone marker such as `tz:Australia/Sydney`.
+
+Additionally, observed on timelapse-mode JPEGs; absent on manually-triggered captures.
 
 A JPEG COM segment (`FF FE`, 1028 bytes total) is appended **after** the
 standard EOI (`FF D9`). The payload is 1024 bytes: 64 × 16-byte records,
