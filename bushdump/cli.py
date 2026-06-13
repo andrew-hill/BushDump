@@ -7,6 +7,7 @@ Heavy deps (bleak, httpx) are imported lazily inside command handlers so that
 from __future__ import annotations
 
 import argparse
+import argcomplete
 import asyncio
 import datetime
 import functools
@@ -746,7 +747,12 @@ def cmd_register(args: argparse.Namespace) -> int:
         return 1
 
     config.add_camera(name, ble_address=address, ssid=ssid, password=password)
-    print(f"Saved '{name}'. Try it with:  ./bd sync {name}")
+    print(f"Saved '{name}'. Try it with:  bushdump sync {name}")
+    return 0
+
+
+def cmd_completions(args: argparse.Namespace) -> int:
+    print(argcomplete.shellcode([args._prog], shell=args.shell), end="")
     return 0
 
 
@@ -897,11 +903,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_sync.set_defaults(func=cmd_sync)
 
+    p_completions = sub.add_parser("completions", help="print shell completion script")
+    p_completions.add_argument("shell", choices=["zsh", "bash", "fish"])
+    p_completions.set_defaults(func=cmd_completions, _prog=parser.prog)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
+    argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
         parser.print_help()

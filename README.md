@@ -5,7 +5,7 @@ laptop over each camera's own WiFi — without using the phone app.
 
 It wakes a camera's WiFi over Bluetooth, joins the access point, and pulls new
 files using date-based incremental sync (only what you haven't already grabbed).
-Register several cameras and `./bd sync` grabs from whichever are nearby.
+Register several cameras and `bushdump sync` grabs from whichever are nearby.
 
 > **Note:** BushDump copies files; it never deletes from the camera's SD card.
 
@@ -28,41 +28,55 @@ fundamentally a file copy.
 - macOS with Bluetooth + WiFi hardware. BushDump uses macOS's built-in
   CoreWLAN/`networksetup` tooling for WiFi scanning and joining.
 
-## Install
+## Installation
+
+Install as a uv tool so `bushdump` is available on your PATH:
 
 ```bash
-uv sync
+uv tool install --editable /path/to/bushdump
 ```
 
-## Usage
+Enable tab-completion in zsh (add to `~/.zshrc`):
 
-`./bd` is a wrapper around the CLI so you don't have to type `uv run` each time.
+```bash
+eval "$(bushdump completions zsh)"
+```
+
+For bash, add to `~/.bashrc`:
+
+```bash
+eval "$(bushdump completions bash)"
+```
+
+> **Development:** to run without installing, use `./bd` (a thin `uv run` wrapper in the repo root).
+
+## Usage
 
 Register each camera once (guided — pick from live lists, no typing long codes):
 
 ```bash
-./bd register        # detect a camera, pick its BLE device + WiFi, give it a name
-./bd cameras         # show configured cameras
+bushdump register        # detect a camera, pick its BLE device + WiFi, give it a name
+bushdump cameras         # show configured cameras
 ```
 
 Then preview or sync whenever you like:
 
 ```bash
-./bd sync             # scan and sync every nearby configured camera
-./bd sync frontgate   # sync just one
-./bd ls frontgate     # preview which files would be downloaded
+bushdump sync             # scan and sync every nearby configured camera
+bushdump sync frontgate   # sync just one
+bushdump ls frontgate     # preview which files would be downloaded
 ```
 
 If hardware or WiFi is being awkward, the inspection commands are useful on
 their own:
 
 ```bash
-./bd stats frontgate  # battery, SD usage, file counts
-./bd ble              # read-only: live-list nearby BLE devices
-./bd wifi             # read-only: live-list WiFi networks
-./bd wake frontgate   # wake the camera's WiFi without syncing
-./bd keepalive frontgate  # keep the camera's WiFi awake until Ctrl+C
-./bd --help           # all commands and flags
+bushdump stats frontgate  # battery, SD usage, file counts
+bushdump ble              # read-only: live-list nearby BLE devices
+bushdump wifi             # read-only: live-list WiFi networks
+bushdump wake frontgate   # wake the camera's WiFi without syncing
+bushdump keepalive frontgate  # keep the camera's WiFi awake until Ctrl+C
+bushdump --help           # all commands and flags
 ```
 
 > **macOS permissions:** the first BLE use prompts for Bluetooth access (approve

@@ -18,7 +18,7 @@ You should reach for these tools when:
   the way the docs claim.
 
 If you just want to sync a camera that's already known to work — use the
-top-level `./bd` CLI, not these tools.
+top-level `bushdump` CLI, not these tools.
 
 ## The flow
 
@@ -34,7 +34,7 @@ output to figure out whether the camera is Linkiing, legacy, or something
 unknown.
 
 ```bash
-./bd ble                                            # find the BLE address
+bushdump ble                                        # find the BLE address
 uv run python tools/inspect-ble.py <ble-address>
 ```
 

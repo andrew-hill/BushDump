@@ -24,25 +24,26 @@ generality. No service to deploy, no multi-tenancy, no scale concerns.
 
 ## Commands
 
-`./bd` is a thin wrapper for `uv run bushdump` — use it to run the CLI.
+Install once with `uv tool install --editable /path/to/bushdump` — then `bushdump` is on your PATH.
+In the repo, `./bd` is a thin `uv run` wrapper you can use without installing.
 
 ```bash
-uv sync                              # install deps into .venv (first-time setup)
-./bd ble                             # live-list nearby BLE devices
-./bd wifi                            # live-list WiFi networks
-./bd wifi <ble-address>              # wake that camera first, then list WiFi (its AP appears)
-./bd register                        # guided: register a camera (pick from live lists)
-./bd cameras                         # show configured cameras
-./bd stats <name>                    # battery, SD usage, file counts
-./bd ls <name>                       # preview which files would be downloaded
-./bd sync                            # scan and sync every nearby configured camera
-./bd sync frontgate                  # sync just one camera
-./bd sync --manual-wifi              # skip auto WiFi; prompt you to join each AP
-./bd keepalive <name>                # keep camera WiFi alive (pings every 10s; Ctrl+C to stop)
-uv run pytest                        # run tests
-uv run pytest tests/test_sync.py -q  # one file
-uv run ruff check .                  # lint
-uv run ruff format .                 # format
+uv sync                                    # install deps into .venv (first-time setup)
+bushdump ble                               # live-list nearby BLE devices
+bushdump wifi                              # live-list WiFi networks
+bushdump wifi <ble-address>                # wake that camera first, then list WiFi (its AP appears)
+bushdump register                          # guided: register a camera (pick from live lists)
+bushdump cameras                           # show configured cameras
+bushdump stats <name>                      # battery, SD usage, file counts
+bushdump ls <name>                         # preview which files would be downloaded
+bushdump sync                              # scan and sync every nearby configured camera
+bushdump sync frontgate                    # sync just one camera
+bushdump sync --manual-wifi                # skip auto WiFi; prompt you to join each AP
+bushdump keepalive <name>                  # keep camera WiFi alive (pings every 10s; Ctrl+C to stop)
+uv run pytest                              # run tests
+uv run pytest tests/test_sync.py -q        # one file
+uv run ruff check .                        # lint
+uv run ruff format .                       # format
 ```
 
 ## Project structure
